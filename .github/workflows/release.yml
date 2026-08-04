@@ -88,6 +88,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -96,9 +100,35 @@ jobs:
       - name: List release files
         run: find artifacts -type f
 
+      - name: Extract changelog for this tag
+        id: changelog
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          NOTES=$(awk -v tag="$TAG" '
+            BEGIN { printing=0 }
+            $0 ~ "^## " tag "( |$)" { printing=1; print; next }
+            printing && /^## / { exit }
+            printing { print }
+          ' CHANGELOG.md)
+          if [ -z "$(echo "$NOTES" | tr -d '[:space:]')" ]; then
+            NOTES="## ${TAG}"$'\n\n'"See CHANGELOG.md for details."
+          fi
+          PREV=$(git tag --sort=-version:refname | awk -v t="$TAG" '$0==t {getline; print; exit}')
+          {
+            echo "RELEASE_BODY<<EOF"
+            printf '%s\n' "$NOTES"
+            if [ -n "$PREV" ]; then
+              echo ""
+              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${TAG}"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
-          generate_release_notes: true
+          body: ${{ steps.changelog.outputs.RELEASE_BODY }}
+          generate_release_notes: false
           draft: false
