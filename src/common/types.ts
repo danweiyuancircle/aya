@@ -220,3 +220,42 @@ export type IpcGetInstalledAppSignature = (
   deviceId: string,
   packageName: string,
 ) => Promise<ISignatureInfo>
+
+export type SigningScheme = 'v1' | 'v2' | 'v1v2'
+
+/** User-facing signing profile (no passwords). */
+export interface ISigningProfile {
+  id: string
+  name: string
+  keystorePath: string
+  keyAlias: string
+  scheme: SigningScheme
+  createdAt: number
+  updatedAt: number
+}
+
+/** Payload for create/update; empty password on update means keep existing. */
+export interface ISigningProfileInput {
+  name: string
+  keystorePath: string
+  keystorePass: string
+  keyAlias: string
+  keyPass: string
+  scheme: SigningScheme
+}
+
+export type IpcGetSigningProfiles = () => Promise<ISigningProfile[]>
+export type IpcAddSigningProfile = (
+  input: ISigningProfileInput,
+) => Promise<ISigningProfile>
+export type IpcUpdateSigningProfile = (
+  id: string,
+  input: ISigningProfileInput,
+) => Promise<ISigningProfile>
+export type IpcDeleteSigningProfile = (id: string) => Promise<void>
+export type IpcSignApkWithProfile = (
+  apkPath: string,
+  profileId: string,
+  outputPath: string,
+  scheme?: SigningScheme,
+) => Promise<void>

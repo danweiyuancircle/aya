@@ -109,9 +109,43 @@
 
 .result {
   margin-top: 12px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-radius: 4px;
   font-size: #{theme.$font-size}px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.result-title {
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.result-path {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: #{theme.$font-size - 1}px;
+  line-height: 1.45;
+  text-align: left;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  opacity: 0.9;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  &:hover {
+    opacity: 1;
+  }
 }
 
 .success {
@@ -187,4 +221,88 @@
 .hint {
   font-size: 14px;
   color: var(--color-text-tertiary);
+}
+
+.secondary-btn {
+  height: 32px;
+  min-width: 88px;
+  padding: 0 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-container);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: #{theme.$font-size}px;
+  &:hover {
+    background: var(--color-fill-secondary);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.empty-guide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0;
+}
+
+.profile-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 640px;
+}
+
+.profile-header {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.profile-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-container);
+}
+
+.profile-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-name {
+  font-size: #{theme.$font-size + 1}px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 6px;
+}
+
+.profile-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: #{theme.$font-size - 1}px;
+  color: var(--color-text-secondary);
+  word-break: break-all;
+}
+
+.profile-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
 }

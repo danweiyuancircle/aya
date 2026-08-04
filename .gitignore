@@ -12,3 +12,6 @@ local.properties
 
 build/*.provisionprofile
 .claude/
+
+# local dwy publish cache
+.dwy/

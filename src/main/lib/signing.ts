@@ -2,16 +2,32 @@ import childProcess from 'node:child_process'
 import { handleEvent, resolveResources } from 'share/main/lib/util'
 import {
   ISignatureInfo,
+  ISigningProfile,
+  ISigningProfileInput,
   IpcSignApk,
   IpcVerifyApk,
   IpcGetInstalledAppSignature,
+  IpcGetSigningProfiles,
+  IpcAddSigningProfile,
+  IpcUpdateSigningProfile,
+  IpcDeleteSigningProfile,
+  IpcSignApkWithProfile,
+  SigningScheme,
 } from 'common/types'
 import { shell } from './adb/base'
 import * as file from './adb/file'
+import { getSigningStore } from './store'
 import trim from 'licia/trim'
+import uuid from 'licia/uuid'
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'fs-extra'
+import { safeStorage } from 'electron'
+
+interface StoredSigningProfile extends ISigningProfile {
+  keystorePassEnc: string
+  keyPassEnc: string
+}
 
 function getApksignerJar() {
   return resolveResources('apksigner.jar')
@@ -48,6 +64,90 @@ function spawnJava(args: string[]): Promise<{
   })
 }
 
+function encryptSecret(plain: string): string {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Encryption unavailable')
+  }
+  return safeStorage.encryptString(plain).toString('base64')
+}
+
+function decryptSecret(enc: string): string {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('Encryption unavailable')
+  }
+  return safeStorage.decryptString(Buffer.from(enc, 'base64'))
+}
+
+function toPublicProfile(stored: StoredSigningProfile): ISigningProfile {
+  return {
+    id: stored.id,
+    name: stored.name,
+    keystorePath: stored.keystorePath,
+    keyAlias: stored.keyAlias,
+    scheme: stored.scheme,
+    createdAt: stored.createdAt,
+    updatedAt: stored.updatedAt,
+  }
+}
+
+function getProfiles(): StoredSigningProfile[] {
+  const store = getSigningStore()
+  const profiles = store.get('profiles') as StoredSigningProfile[] | undefined
+  return profiles ? profiles.slice() : []
+}
+
+function setProfiles(profiles: StoredSigningProfile[]) {
+  getSigningStore().set('profiles', profiles)
+}
+
+function validateInput(
+  input: ISigningProfileInput,
+  options: { requirePasswords: boolean },
+) {
+  const name = trim(input.name || '')
+  if (!name) {
+    throw new Error('Profile name required')
+  }
+  if (!trim(input.keystorePath || '')) {
+    throw new Error('Keystore path required')
+  }
+  if (!trim(input.keyAlias || '')) {
+    throw new Error('Key alias required')
+  }
+  if (!['v1', 'v2', 'v1v2'].includes(input.scheme)) {
+    throw new Error('Invalid signing scheme')
+  }
+  if (options.requirePasswords) {
+    if (!input.keystorePass) {
+      throw new Error('Keystore password required')
+    }
+    if (!input.keyPass) {
+      throw new Error('Key password required')
+    }
+  }
+  return name
+}
+
+function assertNameUnique(name: string, excludeId?: string) {
+  const lower = name.toLowerCase()
+  const conflict = getProfiles().find(
+    (p) => p.id !== excludeId && p.name.toLowerCase() === lower,
+  )
+  if (conflict) {
+    throw new Error('Profile name duplicate')
+  }
+}
+
+function schemeToFlags(scheme: SigningScheme): {
+  v1Enabled: boolean
+  v2Enabled: boolean
+} {
+  return {
+    v1Enabled: scheme === 'v1' || scheme === 'v1v2',
+    v2Enabled: scheme === 'v2' || scheme === 'v1v2',
+  }
+}
+
 const signApk: IpcSignApk = async function (
   apkPath,
   keystorePath,
@@ -58,6 +158,13 @@ const signApk: IpcSignApk = async function (
   v1Enabled,
   v2Enabled,
 ) {
+  if (!(await fs.pathExists(keystorePath))) {
+    throw new Error('Keystore file not found')
+  }
+  if (!(await fs.pathExists(apkPath))) {
+    throw new Error('APK file not found')
+  }
+
   const jar = getApksignerJar()
   const args = [
     '-jar',
@@ -73,6 +180,10 @@ const signApk: IpcSignApk = async function (
     `pass:${keyPass}`,
     `--v1-signing-enabled=${v1Enabled}`,
     `--v2-signing-enabled=${v2Enabled}`,
+    // apksigner defaults v3/v4 to on; UI only offers V1/V2/V1+V2 so keep them off
+    '--v3-signing-enabled=false',
+    // v4 writes a sidecar .idsig next to the APK; not needed for normal install/sign flows
+    '--v4-signing-enabled=false',
     '--out',
     outputPath,
     apkPath,
@@ -85,6 +196,12 @@ const signApk: IpcSignApk = async function (
   if (code !== 0) {
     const errMsg = trim(stderr) || trim(stdout) || 'Sign failed'
     throw new Error(errMsg)
+  }
+
+  // Clean up any leftover v4 idsig if an older apksigner still produced one
+  const idsigPath = `${outputPath}.idsig`
+  if (await fs.pathExists(idsigPath)) {
+    await fs.remove(idsigPath).catch(() => {})
   }
 }
 
@@ -191,8 +308,122 @@ const getInstalledAppSignature: IpcGetInstalledAppSignature = async function (
   }
 }
 
+const getSigningProfiles: IpcGetSigningProfiles = async function () {
+  return getProfiles().map(toPublicProfile)
+}
+
+const addSigningProfile: IpcAddSigningProfile = async function (input) {
+  const name = validateInput(input, { requirePasswords: true })
+  assertNameUnique(name)
+
+  const now = Date.now()
+  const stored: StoredSigningProfile = {
+    id: uuid(),
+    name,
+    keystorePath: trim(input.keystorePath),
+    keyAlias: trim(input.keyAlias),
+    scheme: input.scheme,
+    keystorePassEnc: encryptSecret(input.keystorePass),
+    keyPassEnc: encryptSecret(input.keyPass),
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  const profiles = getProfiles()
+  profiles.push(stored)
+  setProfiles(profiles)
+
+  return toPublicProfile(stored)
+}
+
+const updateSigningProfile: IpcUpdateSigningProfile = async function (
+  id,
+  input,
+) {
+  const profiles = getProfiles()
+  const index = profiles.findIndex((p) => p.id === id)
+  if (index < 0) {
+    throw new Error('Profile not found')
+  }
+
+  const existing = profiles[index]
+  const requirePasswords = false
+  const name = validateInput(input, { requirePasswords })
+  assertNameUnique(name, id)
+
+  if (!existing.keystorePassEnc && !input.keystorePass) {
+    throw new Error('Keystore password required')
+  }
+  if (!existing.keyPassEnc && !input.keyPass) {
+    throw new Error('Key password required')
+  }
+
+  const updated: StoredSigningProfile = {
+    ...existing,
+    name,
+    keystorePath: trim(input.keystorePath),
+    keyAlias: trim(input.keyAlias),
+    scheme: input.scheme,
+    keystorePassEnc: input.keystorePass
+      ? encryptSecret(input.keystorePass)
+      : existing.keystorePassEnc,
+    keyPassEnc: input.keyPass
+      ? encryptSecret(input.keyPass)
+      : existing.keyPassEnc,
+    updatedAt: Date.now(),
+  }
+
+  profiles[index] = updated
+  setProfiles(profiles)
+
+  return toPublicProfile(updated)
+}
+
+const deleteSigningProfile: IpcDeleteSigningProfile = async function (id) {
+  const profiles = getProfiles()
+  const next = profiles.filter((p) => p.id !== id)
+  if (next.length === profiles.length) {
+    throw new Error('Profile not found')
+  }
+  setProfiles(next)
+}
+
+const signApkWithProfile: IpcSignApkWithProfile = async function (
+  apkPath,
+  profileId,
+  outputPath,
+  scheme,
+) {
+  const profiles = getProfiles()
+  const profile = profiles.find((p) => p.id === profileId)
+  if (!profile) {
+    throw new Error('Profile not found')
+  }
+
+  const keystorePass = decryptSecret(profile.keystorePassEnc)
+  const keyPass = decryptSecret(profile.keyPassEnc)
+  const effectiveScheme = scheme || profile.scheme
+  const { v1Enabled, v2Enabled } = schemeToFlags(effectiveScheme)
+
+  await signApk(
+    apkPath,
+    profile.keystorePath,
+    keystorePass,
+    profile.keyAlias,
+    keyPass,
+    outputPath,
+    v1Enabled,
+    v2Enabled,
+  )
+}
+
 export function init() {
   handleEvent('signApk', signApk)
   handleEvent('verifyApk', verifyApk)
   handleEvent('getInstalledAppSignature', getInstalledAppSignature)
+  handleEvent('getSigningProfiles', getSigningProfiles)
+  handleEvent('addSigningProfile', addSigningProfile)
+  handleEvent('updateSigningProfile', updateSigningProfile)
+  handleEvent('deleteSigningProfile', deleteSigningProfile)
+  handleEvent('signApkWithProfile', signApkWithProfile)
 }

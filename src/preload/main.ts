@@ -44,6 +44,11 @@ import {
   IpcScreencap,
   IpcSetRemoteAlwaysOnTop,
   IpcSignApk,
+  IpcSignApkWithProfile,
+  IpcGetSigningProfiles,
+  IpcAddSigningProfile,
+  IpcUpdateSigningProfile,
+  IpcDeleteSigningProfile,
   IpcSetScreencastAlwaysOnTop,
   IpcStartCapture,
   IpcStopCapture,
@@ -150,4 +155,13 @@ export default Object.assign(mainObj, {
   getInstalledAppSignature: invoke<IpcGetInstalledAppSignature>(
     'getInstalledAppSignature',
   ),
+  getSigningProfiles: invoke<IpcGetSigningProfiles>('getSigningProfiles'),
+  addSigningProfile: invoke<IpcAddSigningProfile>('addSigningProfile'),
+  updateSigningProfile: invoke<IpcUpdateSigningProfile>(
+    'updateSigningProfile',
+  ),
+  deleteSigningProfile: invoke<IpcDeleteSigningProfile>(
+    'deleteSigningProfile',
+  ),
+  signApkWithProfile: invoke<IpcSignApkWithProfile>('signApkWithProfile'),
 })

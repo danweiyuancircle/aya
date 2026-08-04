@@ -28,3 +28,9 @@ export const getSettingsStore = memoize(function () {
     killAdbWhenExit: false,
   })
 })
+
+export const getSigningStore = memoize(function () {
+  return new FileStore(getUserDataPath('data/signing.json'), {
+    profiles: [],
+  })
+})

@@ -1,3 +1,12 @@
+## v1.20.0 (4 Aug 2026)
+
+* feat: APK signing with reusable keystore profiles
+* feat: sign APK with V1 / V2 / V1+V2 schemes
+* feat: show signed output path and reveal file in system folder
+* fix: disable APK Signature Scheme v3/v4 by default (no extra .idsig)
+* fix: signing success message layout for long paths
+* chore: remove signature verify panel from signing UI
+
 ## v1.14.2 (28 Nov 2025)
 
 * fix: application icon display error [#151](https://github.com/liriliri/aya/issues/151)

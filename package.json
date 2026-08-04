@@ -2,7 +2,7 @@
   "name": "adb-plus",
   "productName": "ADBPlus",
   "appId": "io.liriliri.ayaai",
-  "version": "1.19.6",
+  "version": "1.20.0",
   "description": "Android adb desktop app",
   "main": "dist/main/index.js",
   "scripts": {
@@ -95,5 +95,12 @@
     "webm-muxer": "^5.1.2",
     "xml2js": "^0.6.2",
     "zx": "^8.8.0"
+  },
+  "allowScripts": {
+    "electron@30.5.1": true,
+    "esbuild@0.21.5": true,
+    "fsevents@2.3.3": true,
+    "protobufjs@7.5.4": true,
+    "@parcel/watcher@2.5.6": true
   }
 }
